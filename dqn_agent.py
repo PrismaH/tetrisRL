@@ -400,8 +400,8 @@ if __name__ == '__main__':
                     print(log)
                     f.write(log + '\n')
                     loss = optimize_model()
-                    if loss:
-                        print('loss: {:.0f}'.format(loss))
+                    if loss.to(dtype=torch.bool):
+                        print('loss: {}'.format(loss))
                 # Checkpoint
                 if i_episode % 100 == 0:
                     is_best = True if score > best_score else False
