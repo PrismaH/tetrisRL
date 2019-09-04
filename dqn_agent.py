@@ -226,7 +226,7 @@ def select_action(state):
     steps_done += 1
     if sample > eps_threshold:
         return model(
-            Variable(state, volatile=True).type(FloatTensor)).data.max(1)[1].view(1, 1)
+            Variable(state, requires_grad=False).type(FloatTensor)).data.max(1)[1].view(1, 1)
     else:
         return FloatTensor([[random.randrange(engine.nb_actions)]])
 
@@ -291,7 +291,7 @@ def optimize_model():
     # requires_grad to False!
     non_final_next_states = Variable(torch.cat([s for s in batch.next_state
                                                 if s is not None]),
-                                     volatile=True)
+                                     requires_grad=False)
     state_batch = Variable(torch.cat(batch.state))
     action_batch = Variable(torch.cat(batch.action))
     reward_batch = Variable(torch.cat(batch.reward))
@@ -306,12 +306,12 @@ def optimize_model():
     # Now, we don't want to mess up the loss with a volatile flag, so let's
     # clear it. After this, we'll just end up with a Variable that has
     # requires_grad=False
-    next_state_values.volatile = False
+    next_state_values.requires_grad = True
     # Compute the expected Q values
     expected_state_action_values = (next_state_values * GAMMA) + reward_batch
 
     # Compute Huber loss
-    loss = F.smooth_l1_loss(state_action_values, expected_state_action_values)
+    loss = F.smooth_l1_loss(state_action_values.squeeze(1), expected_state_action_values)
 
     # Optimize the model
     optimizer.zero_grad()
