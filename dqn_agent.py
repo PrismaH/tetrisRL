@@ -319,8 +319,7 @@ def optimize_model():
         param.grad.data.clamp_(-1, 1)
     optimizer.step()
     
-    if len(loss.data.size())>0 : return loss.data[0] 
-    else : return loss
+    return loss
 
 def optimize_supervised(pred, targ):
     optimizer.zero_grad()
@@ -400,7 +399,7 @@ if __name__ == '__main__':
                     print(log)
                     f.write(log + '\n')
                     loss = optimize_model()
-                    if loss.to(dtype=torch.bool):
+                    if loss:
                         print('loss: {}'.format(loss))
                 # Checkpoint
                 if i_episode % 100 == 0:
