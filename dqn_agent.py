@@ -302,7 +302,7 @@ def optimize_model():
 
     # Compute V(s_{t+1}) for all next states.
     next_state_values = Variable(torch.zeros(BATCH_SIZE).type(FloatTensor))
-    next_state_values[non_final_mask] = model(non_final_next_states.no_grad).max(1)[0]
+    next_state_values[non_final_mask] = model(non_final_next_states.no_grad()).max(1)[0]
     # Now, we don't want to mess up the loss with a volatile flag, so let's
     # clear it. After this, we'll just end up with a Variable that has
     # requires_grad=False
