@@ -16,6 +16,8 @@ import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
 from torch.autograd import Variable
+from torch.optim.lr_scheduler import CyclicLR
+from ranger import Ranger
 
 from engine import TetrisEngine
 
@@ -72,28 +74,107 @@ class ReplayMemory(object):
     def __len__(self):
         return len(self.memory)
 
-
-class DQN(nn.Module):
-
+class Mish(nn.Module):
     def __init__(self):
-        super(DQN, self).__init__()
-        self.conv1 = nn.Conv2d(1, 16, kernel_size=3, stride=1)
-        self.bn1 = nn.BatchNorm2d(16)
-        self.conv2 = nn.Conv2d(16, 32, kernel_size=4, stride=2)
-        self.bn2 = nn.BatchNorm2d(32)
-        #self.conv3 = nn.Conv2d(32, 32, kernel_size=2, stride=2)
-        #self.bn3 = nn.BatchNorm2d(32)
-        #self.rnn = nn.LSTM(448, 240)
-        self.lin1 = nn.Linear(768, 256)
-        self.head = nn.Linear(256, engine.nb_actions)
+        super(Mish, self).__init__()
+    
+    def forward(self, x):
+        x = x * (torch.tanh(F.softplus(x)))
+        return x
+
+class MBConv(nn.Module):
+    def __init__(self, channels_in, channels_out, kernel_size, expand_ratio, stride=1, padding=1):
+        super(MBConv, self).__init__()
+        self.channels_in = channels_in
+        self.channels_out = channels_out
+        self.stride = stride
+
+        self.conv1 = nn.Conv2d(channels_in, channels_in*expand_ratio, kernel_size=1, bias=False)
+        self.bn1 = nn.BatchNorm2d(channels_in*expand_ratio)
+
+        self.conv2 = nn.Conv2d(channels_in*expand_ratio, channels_in*expand_ratio, groups=channels_in*expand_ratio, kernel_size=kernel_size, stride=stride, padding=padding, bias=False)
+        self.bn2 = nn.BatchNorm2d(channels_in*expand_ratio)
+
+        self.conv3 = nn.Conv2d(channels_in*expand_ratio, channels_out, kernel_size=1, bias=False)
+        self.bn3 = nn.BatchNorm2d(channels_out)
+
+        self.mish = Mish()
 
     def forward(self, x):
-        x = F.relu(self.bn1(self.conv1(x)))
-        x = F.relu(self.bn2(self.conv2(x)))
-        #x = F.relu(self.bn3(self.conv3(x)))
-        x = F.relu(self.lin1(x.view(x.size(0), -1)))
-        return self.head(x.view(x.size(0), -1))
+        shortcut = x
 
+        x = self.conv1(x)
+        x = self.bn1(x)
+        x = self.mish(x)
+        x = self.conv2(x)
+        x = self.bn2(x)
+        x = self.mish(x)
+        x = self.conv3(x)
+        x = self.bn3(x)
+        if self.channels_in == self.channels_out and self.stride == 1:
+            x = x + shortcut
+        
+        return x
+
+class DQN(nn.Module):
+    def __init__(self):
+        super(DQN, self).__init__()
+        
+        #activ func
+        self.mish = Mish()
+
+        #First Conv
+        channels_in = 1
+        self.conv1 = nn.Conv2d(channels_in, int(round(32 * 1.4)), kernel_size=3, stride=2, bias=False, padding=1)
+        self.bn1 = nn.BatchNorm2d(int(round(32 * 1.4)))
+
+        self.layer1 = self.build_block(channels_in=32, channels_out=16, kernel_size=3, depth=1, stride=1, expand_ratio=1, padding=1)
+        self.layer2 = self.build_block(channels_in=16, channels_out=24, kernel_size=3, depth=2, stride=2, padding=1)
+        self.layer3 = self.build_block(channels_in=24, channels_out=40, kernel_size=5, depth=2, stride=1, padding=2)
+        self.layer4 = self.build_block(channels_in=40, channels_out=80, kernel_size=3, depth=3, stride=1, padding=1)
+        self.layer5 = self.build_block(channels_in=80, channels_out=112, kernel_size=5, depth=3, stride=1, padding=2)
+        self.layer6 = self.build_block(channels_in=112, channels_out=192, kernel_size=5, depth=4, stride=2, padding=2)
+        self.layer7 = self.build_block(channels_in=192, channels_out=320, kernel_size=3, depth=1, stride=1, padding=1)
+
+        self.conv2 = nn.Conv2d(int(round(320 * 1.4)), int(round(1280 * 1.4)), kernel_size=1, bias=False)
+        self.bn2 = nn.BatchNorm2d(int(round(1280 * 1.4)))
+
+        self.fc1 = nn.Linear(int(round(1280 * 1.4)), engine.nb_actions)
+        
+        for m in self.modules():
+            if isinstance(m, nn.Conv2d):
+                nn.init.kaiming_normal_(m.weight, mode='fan_out', 
+                                        nonlinearity='relu')
+            elif isinstance(m, nn.BatchNorm2d):
+                nn.init.constant_(m.weight, 1)
+                nn.init.constant_(m.bias, 0)
+
+    def build_block(self, channels_in, channels_out, kernel_size, depth, stride, expand_ratio=6, padding=1):
+        block_list = []
+        for _ in range(int(round(depth * 1.8))):
+            block_list.append(MBConv(int(round(channels_in * 1.4)), int(round(channels_out * 1.4)), kernel_size=kernel_size, expand_ratio=expand_ratio, stride=stride, padding=padding))
+            channels_in = channels_out
+            stride = 1
+        return nn.Sequential(*block_list)
+
+    def forward(self, x):
+        x = self.conv1(x)
+        x = self.bn1(x)
+
+        x = self.layer1(x)
+        x = self.layer2(x)
+        x = self.layer3(x)
+        x = self.layer4(x)
+        x = self.layer5(x)
+        x = self.layer6(x)
+        x = self.layer7(x)
+
+        x = self.conv2(x)
+        x = self.bn2(x)
+        x = F.adaptive_avg_pool2d(x, 1)
+        x = self.fc1(x.view(x.size(0), -1))
+
+        return x
 
 ######################################################################
 # Training
@@ -115,7 +196,7 @@ class DQN(nn.Module):
 #    controls the rate of the decay.
 #
 
-BATCH_SIZE = 64
+BATCH_SIZE = 128
 GAMMA = 0.999
 EPS_START = 0.9
 EPS_END = 0.05
@@ -132,7 +213,8 @@ if use_cuda:
     model.cuda()
 
 loss = nn.MSELoss()
-optimizer = optim.RMSprop(model.parameters(), lr=.001)
+optimizer = Ranger(model.parameters(), lr=.001)
+scheduler = CyclicLR(optimizer, base_lr=0.001, max_lr=0.006, mode='triangular')
 memory = ReplayMemory(3000)
 
 
