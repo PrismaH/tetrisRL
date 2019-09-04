@@ -306,7 +306,7 @@ def optimize_model():
     # Now, we don't want to mess up the loss with a volatile flag, so let's
     # clear it. After this, we'll just end up with a Variable that has
     # requires_grad=False
-    next_state_values.requires_grad = True
+    print(next_state_values.requires_grad)
     # Compute the expected Q values
     expected_state_action_values = (next_state_values * GAMMA) + reward_batch
 
