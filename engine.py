@@ -145,7 +145,7 @@ class TetrisEngine:
 
     def step(self, action):
         self.anchor = (int(self.anchor[0]), int(self.anchor[1]))
-        self.shape, self.anchor = self.value_action_map[action].item()(self.shape, self.anchor, self.board)
+        self.shape, self.anchor = self.value_action_map[action.item()](self.shape, self.anchor, self.board)
         # Drop each step
         self.shape, self.anchor = soft_drop(self.shape, self.anchor, self.board)
 
