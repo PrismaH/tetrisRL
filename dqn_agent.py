@@ -10,8 +10,12 @@ import numpy as np
 from collections import namedtuple
 from itertools import count
 from copy import deepcopy
+import warnings
 
-import torch
+with warnings.catch_warnings():
+    warnings.filterwarnings("ignore",category=UserWarning)
+    import torch
+    
 import torch.nn as nn
 import torch.optim as optim
 import torch.nn.functional as F
@@ -214,7 +218,7 @@ if use_cuda:
 
 loss = nn.MSELoss()
 optimizer = Ranger(model.parameters(), lr=.001)
-scheduler = CyclicLR(optimizer, base_lr=0.001, max_lr=0.006, mode='triangular', cycle_momentum=False)
+scheduler = CyclicLR(optimizer, base_lr=0.1, max_lr=0.6, mode='triangular', cycle_momentum=False)
 memory = ReplayMemory(3000)
 
 
@@ -319,9 +323,8 @@ def optimize_model():
         param.grad.data.clamp_(-1, 1)
     optimizer.step()
     
-    #if len(loss.data.size())>0 : return loss.data[0] 
-    #else : 
-    return loss
+    if len(loss.data.size())>0 : return loss.data[0] 
+    else : return loss
 
 def optimize_supervised(pred, targ):
     optimizer.zero_grad()
