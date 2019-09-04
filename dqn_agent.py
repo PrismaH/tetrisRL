@@ -214,7 +214,7 @@ if use_cuda:
 
 loss = nn.MSELoss()
 optimizer = Ranger(model.parameters(), lr=.001)
-scheduler = CyclicLR(optimizer, base_lr=0.001, max_lr=0.006, mode='triangular')
+scheduler = CyclicLR(optimizer, base_lr=0.001, max_lr=0.006, mode='triangular', cycle_momentum=False)
 memory = ReplayMemory(3000)
 
 
