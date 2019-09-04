@@ -13,14 +13,14 @@ from copy import deepcopy
 import warnings
 
 with warnings.catch_warnings():
-    warnings.filterwarnings("ignore",category=UserWarning)
+    warnings.filterwarnings("ignore",category=Warning)
     import torch
-    
-import torch.nn as nn
-import torch.optim as optim
-import torch.nn.functional as F
-from torch.autograd import Variable
-from torch.optim.lr_scheduler import CyclicLR
+    import torch.nn as nn
+    import torch.optim as optim
+    import torch.nn.functional as F
+    from torch.autograd import Variable
+    from torch.optim.lr_scheduler import CyclicLR
+
 from ranger import Ranger
 
 from engine import TetrisEngine
